@@ -1,0 +1,348 @@
+---
+title: "Stability Assignment"
+description: |
+  This assignment analyzes model sensitivity. 
+author: "Trevor Maggart, Caroline Shepherd, & Nick McManus"
+output:
+  html_document:
+    code_folding: hide
+    theme: journal
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+    collapsed: yes
+    smooth_scroll: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = FALSE)
+
+library(sensitivity)
+library(tidyverse)
+library(deSolve)
+library(lhs)
+library(purrr)
+library(ggpubr)
+library(patchwork)
+```
+
+## Overview
+
+For this assignment we are adding hunting of prey to the `lotvmodK.r` function.
+
+We will explore how different hunting levels and different minimum prey populations are likely to effect the stability of the populations of both predator and prey. Then we will use this exploration to recommend a hunting target that will be sustainable.
+
+For this analysis, we will assume the following rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000, min_prey_pop=1.
+
+```{r, class.source = "fold-show"}
+# Our edited model
+lotvmodK <- function(t, pop, pars) {
+  with(as.list(c(pars, pop)), {
+    if (prey < min_prey_pop) {
+      dprey <- rprey * (1 - prey / K) * prey - alpha*prey*pred
+    } else {
+      dprey <- rprey * (1 - prey / K) * prey - alpha*prey*pred - hunt_level*prey
+    }
+    dpred = eff*alpha*prey*pred - pmort*pred
+    return(list(c(prey_growth = dprey,pred_growth = dpred)))})
+}
+```
+
+### Our stability metric
+
+For our stability metric we decided to see if the last 10 days of our 3-year period has a slope of 0 for both predator and prey populations. This would imply that both populations reached a stable value. The function first checks that there are 10 days in the dataframe and that all populations are above 0.
+
+```{r, include = TRUE, class.source = "fold-show"}
+# Our stability model
+stability_metric <- function(res){
+  # Create a prey subset
+  prey_sub <- res %>% 
+    filter(animal == 'prey')
+  # Create a predator subset
+  pred_sub <- res %>% 
+    filter(animal == 'pred')
+  # See if the slopes of the populations for the last 10 days are equal to 0
+  if(nrow(prey_sub) >= 10 & nrow(pred_sub) >= 10 &
+     round(prey_sub$pop[nrow(prey_sub)]-prey_sub$pop[nrow(prey_sub)-10],0) == 0 &
+     round(pred_sub$pop[nrow(pred_sub)]-pred_sub$pop[nrow(pred_sub)-10],0) == 0){
+    print("Populations are stable")
+  } else{
+    print("Populations aren't stable")
+  }
+}
+```
+
+## Exploring different hunting rates (0.25, 0.5, 0.75, 1)
+
+We decided to explore four different hunting rates with a starting population of 1 for both predators and prey. Results show that all hunting rates reach stability except for the rate of 1. 
+
+```{r}
+# Set our parameters that will not change throughout
+## We chose a three-year period (or 1095 days) for our evaluation time
+days = seq(from=1,to=1095)
+
+## Current population of 1 prey and 1 predator
+currpop=c(prey=1, pred=1)
+```
+
+```{r}
+# Set the parameter list for our first exploration with a hunting level of 0.25
+pars = data.frame(rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000, hunt_level = 0.25, min_prey_pop = 1)
+
+# Run our ODE solver
+res1 = ode(func=lotvmodK, y=currpop, times=days, parms=pars)
+res1 = as.data.frame(res1) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_0.25 <- ggplot(res1, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('hunting rate = 0.25')
+
+# Set the parameter list for our second exploration with a hunting level of 0.5
+pars = data.frame(rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000, hunt_level = 0.5, min_prey_pop = 1)
+
+# Run our ODE solver
+res2 = ode(func=lotvmodK, y=currpop, times=days, parms=pars)
+res2 = as.data.frame(res2) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_0.5 <- ggplot(res2, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('hunting rate = 0.5')
+
+# Set the parameter list for our third exploration with a hunting level of 0.75
+pars = data.frame(rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000, hunt_level = 0.75, min_prey_pop = 1)
+
+# Run our ODE solver
+res3 = ode(func=lotvmodK, y=currpop, times=days, parms=pars)
+res3 = as.data.frame(res3) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_0.75 <- ggplot(res3, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('hunting rate = 0.75')
+
+# Set the parameter list for our fourth exploration with a hunting level of 1
+pars = data.frame(rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000, hunt_level = 1, min_prey_pop = 1)
+
+# Run our ODE solver
+res4 = ode(func=lotvmodK, y=currpop, times=days, parms=pars)
+res4 = as.data.frame(res4) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_1 <- ggplot(res4, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('hunting rate = 1')
+```
+
+```{r}
+(p_0.25 | p_0.5) / (p_0.75 | p_1)
+```
+
+Testing the stability metric for the four scenarios:
+
+```{r, class.source = "fold-show"}
+stability_metric(res=res1)
+stability_metric(res=res2)
+stability_metric(res=res3)
+stability_metric(res=res4)
+```
+
+We can see that hunting levels 0.25-0.75 show stable populations, and hunting level 1 shows an unstable population as expected. However, we will now check if the function works for an unstable population with more than 10 days of data by subsetting the first hunting level (0.25).
+
+```{r, class.source = "fold-show"}
+stability_metric(res=res1)
+stability_metric(res=subset(res1, time < 300))
+```
+
+Clearly the function is working as the subset does not show a stable population and this is supported by what we see visually in our graphs. 
+
+## Exploring different prey populations (2, 5, 10, 50)
+
+We decided to explore four different starting prey populations using a consistent hunting rate of 0.5 as previous results showed this was stable for a starting population of 1. Results are fairly similar, but stability is reached at different points, and prey populations fluctuate. All scenarios reach stability. 
+
+```{r}
+# Choose 4 initial prey populations
+currpop_2=c(prey=2, pred=1)
+currpop_5=c(prey=5, pred=1)
+currpop_10=c(prey=10, pred=1)
+currpop_50=c(prey=50, pred=1)
+
+# Set the parameter list for this exploratory analysis
+pars = data.frame(rprey=0.95, alpha=0.01, eff=0.6,pmort=0.4, K=2000, hunt_level = 0.5, min_prey_pop = 1)
+
+# Run our ODE solver for currpop_1
+res = ode(func=lotvmodK, y=currpop_2, times=days, parms=pars)
+res = as.data.frame(res) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_curr_2 <- ggplot(res, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('prey population = 2')
+
+# Run our ODE solver for currpop_2
+res = ode(func=lotvmodK, y=currpop_5, times=days, parms=pars)
+res = as.data.frame(res) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_curr_5 <- ggplot(res, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('prey population = 5')
+
+# Run our ODE solver for currpop_5
+res = ode(func=lotvmodK, y=currpop_10, times=days, parms=pars)
+res = as.data.frame(res) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_curr_10 <- ggplot(res, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('prey population = 10')
+
+# Run our ODE solver for currpop_10
+res = ode(func=lotvmodK, y=currpop_50, times=days, parms=pars)
+res = as.data.frame(res) %>% gather(key="animal", value="pop",-time)
+
+# Create a plot to show later
+p_curr_50 <- ggplot(res, aes(time, pop, col=animal)) +
+  theme_minimal() +
+  geom_line() +
+  labs(x = "Days",
+       y = "Population") +
+  scale_color_manual(values = c("#FF9F1C","#2EC4B6")) +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9)) +
+    ggtitle('prey population = 50')
+```
+
+```{r}
+(p_curr_2 | p_curr_5) / (p_curr_10 | p_curr_50)
+```
+
+## Analyzing the relationship between prey growth rate and hunting rate
+
+Here we graph the relationship between prey growth rate and hunting rate. We see that prey populations have a positive growth rate until it reaches a hunting rate around 0.8.
+```{r}
+# looking at hunting levels and prey populations
+hunt_level <- seq(from = 0, to = 1, by = 0.01)
+dpredprey <- map_df(hunt_level, ~lotvmodK(pop = currpop, t = NULL, pars = list(rprey = 0.95, alpha = 0.01, eff = 0.6, pmort = 0.4, K = 2000, min_prey_pop = 1, hunt_level = .x)))
+
+hunt_pop_p = ggplot(data = dpredprey, aes(hunt_level, prey_growth)) +
+  theme_minimal() +
+  geom_point(col="aquamarine4") +
+  geom_hline(yintercept = 0, col="salmon") +
+  labs(y="Prey Growth Rate", x="Hunting Rate") +
+  theme(
+    plot.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    axis.title.x = element_text(size = 12, family = "Avenir", face = 'bold', vjust = -0.5),
+    axis.title.y = element_text(size = 12, family = "Avenir", face = 'bold', vjust = 2),
+    legend.title = element_text(size = 12, family = "Avenir", face = 'bold'),
+    legend.text = element_text(size = 8, family = "Avenir", face = 'bold'),
+    legend.background = element_rect(fill="white"),
+    legend.justification=c(1,1), 
+    legend.position=c(0.9,0.9))
+
+hunt_pop_p 
+```
+
+We defined stability based on the predator and prey population having a slope of 0 near the end of our time frame (the last 10 days of our 3-year period). Depending on the needs of the local ecology and other confounding variables we recommend a hunting rate below of 0.75 or below to maintain stable populations.
+
